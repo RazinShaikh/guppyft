@@ -175,6 +175,12 @@ def prep_t_state() -> "Qubit":
     :math:`T^\dagger` injection."""
 
 
+@hugr_op(_logical_op("prep_t_state_non_ft", _OPS_EXTN), effects=[Effect.ANY])
+@no_type_check
+def prep_t_state_non_ft() -> "Qubit":
+    r"""Prepare a logical :math:`T\ket{+}` magic state non-fault-tolerantly."""
+
+
 @hugr_op(_logical_op("inject_t", _OPS_EXTN))
 @no_type_check
 def inject_t(qubit: "Qubit", magic: "Qubit" @ owned) -> None:

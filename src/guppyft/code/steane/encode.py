@@ -29,6 +29,7 @@ from guppyft.code.steane.primitives import (
     knill_qec_cycle,
     measure_z,
     prep_t_state_ft,
+    prep_t_state_non_ft,
     prep_zero_ft,
     s,
     sdg,
@@ -381,6 +382,22 @@ class SteaneBuilder:
                 blk_id, qb_id = state.allocate_next_addr()
                 blk = state.magic_state_factory.get_state()
                 state.put_block(blk_id, blk)
+
+                state.qec_policy(array(blk_id), comptime(qec_policy.costs.prep_t))
+
+                return state, (blk_id, qb_id)
+
+            return map_global(_impl)
+
+        @_register_op_replacement(steane_ops.prep_t_state_non_ft_def)
+        @guppy
+        @no_type_check
+        @link_name("guppyft.steane._prep_t_state_non_ft")
+        def _prep_t_state_non_ft() -> tuple[tuple[int, int]]:
+            @guppy
+            def _impl(state: STATE @ owned) -> tuple[STATE, tuple[int, int]]:
+                blk_id, qb_id = state.allocate_next_addr()
+                state.put_block(blk_id, prep_t_state_non_ft())
 
                 state.qec_policy(array(blk_id), comptime(qec_policy.costs.prep_t))
 

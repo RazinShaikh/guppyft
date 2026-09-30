@@ -208,6 +208,18 @@ class SteaneOpsExtension:
         return self.prep_t_state_def.instantiate([])
 
     @functools.cached_property
+    def prep_t_state_non_ft_def(self) -> OpDef:
+        """Prepare a T magic state non-fault-tolerantly, e.g. as input to distillation.
+
+        This is the generic operation definition. For the instantiated operation, see
+        `prep_t_state_non_ft`."""
+        return self().get_op("prep_t_state_non_ft")
+
+    def prep_t_state_non_ft(self) -> ExtOp:
+        """Prepare a T magic state non-fault-tolerantly."""
+        return self.prep_t_state_non_ft_def.instantiate([])
+
+    @functools.cached_property
     def inject_t_def(self) -> OpDef:
         """Perform a T gate by injecting a magic state.
 
