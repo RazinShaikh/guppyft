@@ -18,6 +18,9 @@ from guppylang_internals.tys import Effect
 from guppyft.code._logical import _logical_op
 from guppyft.extensions import steane_ops, steane_types
 from guppyft.std._rotation import _RotationCompiler
+from guppyft.std.code_primitives import code_primitives_from
+from guppyft.std.distillation import Distillation15To1, DistillationFlags
+from guppyft.std.state_factory import PreBlock
 
 _OPS_EXTN = steane_ops()
 
@@ -223,3 +226,38 @@ def tdg(q: Qubit) -> None:
     r"""Apply a logical :math:`T^\dagger` gate using magic-state injection."""
     a = prep_t_state()
     inject_tdg(q, a)
+
+
+@guppy
+@no_type_check
+def _decode(m: Measurement) -> bool:
+    return m.decode()
+
+
+SteaneOps = code_primitives_from(
+    Qubit,
+    Measurement,
+    prep_zero=Qubit,
+    prep_noisy_t=prep_t_state_non_ft,
+    x=x,
+    z=z,
+    h=h,
+    sdg=sdg,
+    cx=cx,
+    measure_z=measure_z,
+    decode=_decode,
+    discard=free,
+)
+
+
+@guppy
+@no_type_check
+def prep_t_state_distilled() -> PreBlock[
+    Qubit, DistillationFlags[Measurement, SteaneOps]
+]:
+    r"""Run one round of 15-to-1 :math:`T\ket{+}` distillation.
+
+    Calling `force_check` on the result returns the distilled state, or `nothing` if
+    the round was rejected.
+    """
+    return Distillation15To1(SteaneOps()).prepare()
