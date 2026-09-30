@@ -9,11 +9,12 @@ __all__ = ["CodePrimitives", "code_primitives_from"]
 
 
 @guppy.protocol
-class CodePrimitives[Q]:
+class CodePrimitives[Q, M]:
     """Logical primitives of a code acting on its logical qubit type.
 
     Type parameters:
         Q: The code's logical qubit type.
+        M: The code's logical measurement type, decoded with `decode`.
     """
 
     @guppy.require
@@ -54,8 +55,13 @@ class CodePrimitives[Q]:
 
     @guppy.require
     @no_type_check
-    def measure_z(self, q: Q @ owned) -> bool:
-        """Measure the qubit in the logical Z basis and return the decoded outcome."""
+    def measure_z(self, q: Q @ owned) -> M:
+        """Measure the qubit in the logical Z basis, without decoding the outcome."""
+
+    @guppy.require
+    @no_type_check
+    def decode(self, m: M) -> bool:
+        """Decode a logical measurement outcome."""
 
     @guppy.require
     @no_type_check
@@ -65,6 +71,7 @@ class CodePrimitives[Q]:
 
 def code_primitives_from(
     qubit_type: Any,
+    measurement_type: Any,
     *,
     prep_zero: Any,
     prep_noisy_t: Any,
@@ -74,22 +81,25 @@ def code_primitives_from(
     sdg: Any,
     cx: Any,
     measure_z: Any,
+    decode: Any,
     discard: Any,
 ) -> type:
-    """Build a struct implementing `CodePrimitives[qubit_type]` from Guppy functions.
+    """Build a struct implementing `CodePrimitives[qubit_type, measurement_type]` from
+    Guppy functions.
 
     Each argument must be a Guppy function (or op) with the signature of the protocol
     method of the same name, without `self`. Call once per code at module level, as
     each call defines a new Guppy type.
     """
     # Renamed so the method definitions below do not shadow them.
-    Q = qubit_type
+    Q, M = qubit_type, measurement_type
     prep_zero_fn, prep_noisy_t_fn = prep_zero, prep_noisy_t
     x_fn, z_fn, h_fn, sdg_fn, cx_fn = x, z, h, sdg, cx
-    measure_z_fn, discard_fn = measure_z, discard
+    measure_z_fn, decode_fn, discard_fn = measure_z, decode, discard
 
-    @guppy.struct
-    class CodePrimitivesImpl:
+    # Frozen so generic constructions can copy it.
+    @guppy.struct(frozen=True)
+    class CodePrimitivesImpl:  # type: ignore[misc]
         @guppy
         @no_type_check
         def prep_zero(self) -> Q:
@@ -127,8 +137,13 @@ def code_primitives_from(
 
         @guppy
         @no_type_check
-        def measure_z(self, q: Q @ owned) -> bool:
+        def measure_z(self, q: Q @ owned) -> M:
             return measure_z_fn(q)
+
+        @guppy
+        @no_type_check
+        def decode(self, m: M) -> bool:
+            return decode_fn(m)
 
         @guppy
         @no_type_check
