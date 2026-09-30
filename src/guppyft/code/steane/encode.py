@@ -13,6 +13,7 @@ from guppylang.std.builtins import array, comptime, owned
 from guppylang.std.collections import Stack, empty_queue
 from guppylang.std.option import Option, nothing, some
 from guppylang.std.platform import panic
+from guppylang.std.quantum import Measurement
 from hugr.ext import ExtensionRegistry, OpDef
 from hugr.package import Package
 from hugr.std import _std_extensions
@@ -245,10 +246,14 @@ class SteaneBuilder:
             qec_counter: array[float, comptime(n_blocks)]  # type: ignore[valid-type]
 
             zero_state_factory: StateFactory[  # type: ignore[valid-type,type-arg]
-                7, 1, comptime(self._zero_factory_conf.size)
+                LogicalBlock[7],
+                array[Measurement, 1],
+                comptime(self._zero_factory_conf.size),
             ]
             magic_state_factory: StateFactory[  # type: ignore[valid-type,type-arg]
-                7, 8, comptime(self._magic_factory_conf.size)
+                LogicalBlock[7],
+                array[Measurement, 8],
+                comptime(self._magic_factory_conf.size),
             ]
 
             @guppy
