@@ -3,19 +3,15 @@
 from typing import no_type_check
 
 from guppylang import guppy
-from guppylang.std.builtins import array, comptime, nat, owned
+from guppylang.std.builtins import array, comptime, owned
 from guppylang.std.lang import Drop
 from guppylang.std.option import Option, nothing, some
 
-from ._logical_block import LogicalBlock
 from .code_primitives import CodePrimitives
 
 __all__ = [
     "Distillation15To1",
 ]
-
-BLOCK_SIZE = guppy.nat_var("BLOCK_SIZE")
-BATCH_SIZE = guppy.nat_var("BATCH_SIZE")
 
 _N_BLOCKS = 16
 _PLUS_IDXS = [0, 1, 2, 4, 8]
@@ -67,27 +63,27 @@ def _parity(outcomes: array[bool, comptime(_N_BLOCKS)]) -> bool:
 
 @guppy
 @no_type_check
-def _inject_tdg[BLOCK_SIZE: nat, Ops: CodePrimitives[BLOCK_SIZE]](
+def _inject_tdg[Q, Ops: CodePrimitives[Q]](
     ops: Ops,
-    blk: LogicalBlock[BLOCK_SIZE],
-    t_state: LogicalBlock[BLOCK_SIZE] @ owned,
+    q: Q,
+    t_state: Q @ owned,
 ) -> None:
-    r"""Apply T dagger to `blk` by consuming a :math:`T\ket{+}` state."""
-    ops.cx(blk, t_state)
+    r"""Apply T dagger to `q` by consuming a :math:`T\ket{+}` state."""
+    ops.cx(q, t_state)
     if not ops.measure_z(t_state):
-        ops.sdg(blk)
+        ops.sdg(q)
 
 
 @guppy.struct
 class Distillation15To1[
-    BLOCK_SIZE: nat,
-    Ops: (CodePrimitives[BLOCK_SIZE], Drop),  # type: ignore[name-defined]
+    Q,
+    Ops: (CodePrimitives[Q], Drop),  # type: ignore[name-defined]
 ]:
     r"""15-to-1 :math:`T\ket{+}` distillation using the [[15, 1, 3]] Reed-Muller code.
 
-    Block 0 is entangled with a 15-block Reed-Muller code block, on which transversal
+    Qubit 0 is entangled with a 15-qubit Reed-Muller code block, on which transversal
     T dagger (via noisy :math:`T\ket{+}` injection) acts as a logical T. Measuring the
-    15 blocks in the X basis teleports :math:`T\ket{+}` onto block 0, and the X
+    15 qubits in the X basis teleports :math:`T\ket{+}` onto qubit 0, and the X
     stabilizer parities detect faulty injections.
 
     Circuit taken from Fig. 8 of:
@@ -101,29 +97,29 @@ class Distillation15To1[
 
     @guppy
     @no_type_check
-    def prepare(self) -> Option[LogicalBlock[BLOCK_SIZE]]:
+    def prepare(self) -> Option[Q]:
         r"""Attempt one distillation round.
 
-        Returns the distilled :math:`T\ket{+}` block, or `nothing` if a check failed.
+        Returns the distilled :math:`T\ket{+}` qubit, or `nothing` if a check failed.
         """
-        blocks = array(self.ops.prep_zero() for _ in range(comptime(_N_BLOCKS)))
+        qs = array(self.ops.prep_zero() for _ in range(comptime(_N_BLOCKS)))
         for i in comptime(_PLUS_IDXS):
-            self.ops.h(blocks[i])
+            self.ops.h(qs[i])
         for c, t in comptime(_ENCODER_CX_PAIRS):
-            self.ops.cx(blocks[c], blocks[t])
+            self.ops.cx(qs[c], qs[t])
 
         outcomes = array(False for _ in range(comptime(_N_BLOCKS)))
         for j in range(1, comptime(_N_BLOCKS)):
             t_state = self.ops.prep_noisy_t()
-            _inject_tdg(self.ops, blocks[j], t_state)
-            self.ops.h(blocks[j])
-            outcomes[j] = self.ops.measure_z(blocks.take(j))
+            _inject_tdg(self.ops, qs[j], t_state)
+            self.ops.h(qs[j])
+            outcomes[j] = self.ops.measure_z(qs.take(j))
 
-        out = blocks.take(0)
-        blocks.discard_all_taken()
+        out = qs.take(0)
+        qs.discard_all_taken()
 
         if not _checks_pass(outcomes):
-            out.discard()
+            self.ops.discard(out)
             return nothing()
 
         if _parity(outcomes):
