@@ -36,6 +36,11 @@ class CodePrimitives[BLOCK_SIZE: nat]:
 
     @guppy.require
     @no_type_check
+    def z(self, blk: LogicalBlock[BLOCK_SIZE]) -> None:
+        """Apply a logical Z gate."""
+
+    @guppy.require
+    @no_type_check
     def h(self, blk: LogicalBlock[BLOCK_SIZE]) -> None:
         """Apply a logical H gate."""
 
