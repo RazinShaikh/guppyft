@@ -31,6 +31,7 @@ __all__ = [
     "knill_qec_cycle",
     "measure_z",
     "prep_t_state_ft",
+    "prep_t_state_non_ft",
     "prep_zero_ft",
     "prep_zero_non_ft",
     "s",
@@ -235,6 +236,16 @@ def _prep_h_non_ft() -> LogicalBlock[7]:
         qlib.cx(arr[relabel[ctl]], arr[relabel[tgt]])
 
     return LogicalBlock(arr)
+
+
+@guppy
+@no_type_check
+def prep_t_state_non_ft() -> LogicalBlock[7]:
+    """Non-fault-tolerant preparation of a T|+> logical state on a Steane block."""
+    blk = _prep_h_non_ft()
+    sdg(blk)
+    h(blk)
+    return blk
 
 
 @guppy.comptime
