@@ -12,6 +12,7 @@ from guppylang.std.quantum import Measurement, collect_measurements
 from ._logical_block import LogicalBlock
 
 __all__ = [
+    "NoResources",
     "PreBlock",
     "StateFactory",
     "flagged_pre_block",
@@ -103,33 +104,43 @@ def flagged_pre_block(
 
 
 @guppy.struct
-class StateFactory[Q, F, BATCH_SIZE: nat]:
+class NoResources:
+    """Resources for a `StateFactory` whose prep routine needs none."""
+
+
+@guppy.struct
+class StateFactory[Q, F, R, BATCH_SIZE: nat]:
     """State factory, making preparation attempts in parallel.
 
     Type parameters:
         Q: Type of the prepared state.
         F: Type of the flags of each `PreBlock`.
+        R: Type of the resources passed to the prep routine, e.g. another factory to
+            draw input states from. Use `NoResources` if none are needed.
         BATCH_SIZE: Number of states produced in the same batch.
 
     Attributes:
-        prep_routine: Function to prepare a state.
+        prep_routine: Function to prepare a state, given the resources.
         max_attempts: Maximum number of repeat-until-success attempts.
         batch: The Queue of elements in the batch. Provide an empty
           queue with `guppylang.std.collections.queue.empty_queue`.
     """
 
-    prep_routine: Function[[], PreBlock[Q, F]]  # type: ignore[type-arg,valid-type]
+    prep_routine: Function[[R], PreBlock[Q, F]]  # type: ignore[type-arg,valid-type,misc]
     max_attempts: int
     batch: Queue[PreBlock[Q, F], BATCH_SIZE]
 
     @guppy
     @no_type_check
-    def get_state(self) -> Q:
+    def get_state(self, resources: R) -> Q:
         """Parallel RUS preparation, up to `self.max_attempts` retries.
 
         All `BATCH_SIZE` state preparations may be run in parallel. If any of them
         succeeds, the state is returned. Surplus states are stored and can be fetched by
         subsequent calls to this function.
+
+        Args:
+            resources: Resources passed to each call of the prep routine.
         """
         if BATCH_SIZE <= 0:  # type: ignore[misc]
             panic("StateFactory: BATCH_SIZE must be greater than zero")
@@ -138,7 +149,7 @@ class StateFactory[Q, F, BATCH_SIZE: nat]:
             # If empty, request a new batch
             if len(self.batch) == 0:
                 for _ in range(BATCH_SIZE):  # type: ignore[misc]
-                    self.batch.push(self.prep_routine())
+                    self.batch.push(self.prep_routine(resources))
 
             # Pop an element from batch and check if it successfully prepared a state
             pre_block_prep = self.batch.pop()

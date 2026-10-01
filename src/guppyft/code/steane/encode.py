@@ -53,12 +53,28 @@ from guppyft.encode import (
 from guppyft.extensions import std_ops, std_types, steane_ops, steane_types
 from guppyft.globals import map_global, with_global
 from guppyft.std import LogicalBlock
-from guppyft.std.state_factory import StateFactory
+from guppyft.std.state_factory import NoResources, PreBlock, StateFactory
 
 from . import logical as steane_logical
 from .primitives import RawMeasurement
 
 N = guppy.nat_var("N")
+
+
+@guppy
+@no_type_check
+def _prep_zero_routine(
+    resources: NoResources,
+) -> PreBlock[LogicalBlock[7], array[Measurement, 1]]:
+    return prep_zero_ft()
+
+
+@guppy
+@no_type_check
+def _prep_t_state_flagged(
+    resources: NoResources,
+) -> PreBlock[LogicalBlock[7], array[Measurement, 8]]:
+    return prep_t_state_ft()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -248,11 +264,13 @@ class SteaneBuilder:
             zero_state_factory: StateFactory[  # type: ignore[valid-type,type-arg]
                 LogicalBlock[7],
                 array[Measurement, 1],
+                NoResources,
                 comptime(self._zero_factory_conf.size),
             ]
             magic_state_factory: StateFactory[  # type: ignore[valid-type,type-arg]
                 LogicalBlock[7],
                 array[Measurement, 8],
+                NoResources,
                 comptime(self._magic_factory_conf.size),
             ]
 
@@ -317,8 +335,8 @@ class SteaneBuilder:
                 @no_type_check
                 def qec_cycle_def(state: STATE, q: LogicalBlock[7]) -> None:
                     # Allocate new blocks for the Bell state
-                    ancilla0 = state.zero_state_factory.get_state()
-                    ancilla1 = state.zero_state_factory.get_state()
+                    ancilla0 = state.zero_state_factory.get_state(NoResources())
+                    ancilla1 = state.zero_state_factory.get_state(NoResources())
                     knill_qec_cycle(q, ancilla0, ancilla1)
 
             case QECStyle.Steane:
@@ -326,9 +344,9 @@ class SteaneBuilder:
                 @guppy
                 @no_type_check
                 def qec_cycle_def(state: STATE, q: LogicalBlock[7]) -> None:
-                    ancillaX = state.zero_state_factory.get_state()
+                    ancillaX = state.zero_state_factory.get_state(NoResources())
                     steane_x_qec_cycle(q, ancillaX)
-                    ancillaZ = state.zero_state_factory.get_state()
+                    ancillaZ = state.zero_state_factory.get_state(NoResources())
                     steane_z_qec_cycle(q, ancillaZ)
 
         @_register_op_replacement(steane_ops.qec_cycle_def)
@@ -368,7 +386,7 @@ class SteaneBuilder:
             @guppy
             def _impl(state: STATE @ owned) -> tuple[STATE, tuple[int, int]]:
                 blk_id, qb_id = state.allocate_next_addr()
-                blk = state.zero_state_factory.get_state()
+                blk = state.zero_state_factory.get_state(NoResources())
                 state.put_block(blk_id, blk)
 
                 state.qec_policy(array(blk_id), comptime(qec_policy.costs.prep_zero))
@@ -385,7 +403,7 @@ class SteaneBuilder:
             @guppy
             def _impl(state: STATE @ owned) -> tuple[STATE, tuple[int, int]]:
                 blk_id, qb_id = state.allocate_next_addr()
-                blk = state.magic_state_factory.get_state()
+                blk = state.magic_state_factory.get_state(NoResources())
                 state.put_block(blk_id, blk)
 
                 state.qec_policy(array(blk_id), comptime(qec_policy.costs.prep_t))
@@ -685,13 +703,13 @@ class SteaneBuilder:
                 array(0.0 for _ in range(comptime(n_blocks))),
                 # Zero state factory
                 StateFactory(
-                    prep_zero_ft,
+                    _prep_zero_routine,
                     comptime(self._zero_factory_conf.max_attempts),
                     empty_queue(),
                 ),
                 # Magic state factory
                 StateFactory(
-                    prep_t_state_ft,
+                    _prep_t_state_flagged,
                     comptime(self._magic_factory_conf.max_attempts),
                     empty_queue(),
                 ),
