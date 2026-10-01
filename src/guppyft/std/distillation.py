@@ -142,13 +142,17 @@ class Distillation15To1[
 
     @guppy
     @no_type_check
-    def prepare(self) -> PreBlock[Q, DistillationFlags[M, Ops]]:
+    def prepare(
+        self, qs: array[Q, comptime(_N_BLOCKS)] @ owned
+    ) -> PreBlock[Q, DistillationFlags[M, Ops]]:
         r"""Run one distillation round without reading the X-basis outcomes.
 
         Calling `force_check` on the result reads the outcomes, and returns the
         distilled :math:`T\ket{+}` state, or `nothing` if a check failed.
+
+        Args:
+            qs: 16 qubits in the logical zero state, consumed by the round.
         """
-        qs = array(self.ops.prep_zero() for _ in range(comptime(_N_BLOCKS)))
         for i in comptime(_PLUS_IDXS):
             self.ops.h(qs[i])
         for c, t in comptime(_ENCODER_CX_PAIRS):

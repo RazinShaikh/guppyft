@@ -19,11 +19,6 @@ class CodePrimitives[Q, M]:
 
     @guppy.require
     @no_type_check
-    def prep_zero(self) -> Q:
-        """Prepare a qubit in the logical zero state."""
-
-    @guppy.require
-    @no_type_check
     def prep_noisy_t(self) -> Q:
         r"""Prepare a qubit in the logical :math:`T\ket{+}` state, not necessarily
         fault-tolerantly."""
@@ -73,7 +68,6 @@ def code_primitives_from(
     qubit_type: Any,
     measurement_type: Any,
     *,
-    prep_zero: Any,
     prep_noisy_t: Any,
     x: Any,
     z: Any,
@@ -93,18 +87,13 @@ def code_primitives_from(
     """
     # Renamed so the method definitions below do not shadow them.
     Q, M = qubit_type, measurement_type
-    prep_zero_fn, prep_noisy_t_fn = prep_zero, prep_noisy_t
+    prep_noisy_t_fn = prep_noisy_t
     x_fn, z_fn, h_fn, sdg_fn, cx_fn = x, z, h, sdg, cx
     measure_z_fn, decode_fn, discard_fn = measure_z, decode, discard
 
     # Frozen so generic constructions can copy it.
     @guppy.struct(frozen=True)
     class CodePrimitivesImpl:  # type: ignore[misc]
-        @guppy
-        @no_type_check
-        def prep_zero(self) -> Q:
-            return prep_zero_fn()
-
         @guppy
         @no_type_check
         def prep_noisy_t(self) -> Q:

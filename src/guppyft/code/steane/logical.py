@@ -11,6 +11,7 @@ from typing import no_type_check
 
 from guppylang import guppy
 from guppylang.std.angles import angle
+from guppylang.std.builtins import array
 from guppylang.std.lang import owned
 from guppylang_internals.decorator import custom_function, custom_type, hugr_op
 from guppylang_internals.tys import Effect
@@ -237,7 +238,6 @@ def _decode(m: Measurement) -> bool:
 SteaneOps = code_primitives_from(
     Qubit,
     Measurement,
-    prep_zero=Qubit,
     prep_noisy_t=prep_t_state_non_ft,
     x=x,
     z=z,
@@ -260,4 +260,4 @@ def prep_t_state_distilled() -> PreBlock[
     Calling `force_check` on the result returns the distilled state, or `nothing` if
     the round was rejected.
     """
-    return Distillation15To1(SteaneOps()).prepare()
+    return Distillation15To1(SteaneOps()).prepare(array(Qubit() for _ in range(16)))
