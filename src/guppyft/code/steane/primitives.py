@@ -17,8 +17,11 @@ from zixy.qubit import pauli
 
 from guppyft.code_def import StabilizerCode
 from guppyft.std import LogicalBlock
-from guppyft.std.code_primitives import CodePrimitives
-from guppyft.std.distillation import Distillation15To1, DistillationFlags
+from guppyft.std.distillation import (
+    Distillation15To1,
+    Distillation15To1Ops,
+    DistillationFlags,
+)
 from guppyft.std.state_factory import (
     NoResources,
     PreBlock,
@@ -525,6 +528,6 @@ def prep_t_state_distilled[F, N: nat](
     Args:
         zero_factory: Factory providing the logical zero states used by the round.
     """
-    ops = CodePrimitives(prep_t_state_non_ft, h, sdg, z, cx, measure_z, decode)
+    ops = Distillation15To1Ops(prep_t_state_non_ft, h, sdg, z, cx, measure_z, decode)
     zeros = array(zero_factory.get_state(NoResources()) for _ in range(16))
     return Distillation15To1(ops).prepare(zeros)

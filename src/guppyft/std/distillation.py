@@ -1,17 +1,17 @@
-"""Magic state distillation built from a code's `CodePrimitives`."""
+"""Magic state distillation built from a code's own logical operations."""
 
 from typing import no_type_check
 
 from guppylang import guppy
 from guppylang.std.builtins import array, comptime, owned
-from guppylang.std.lang import Drop
+from guppylang.std.lang import Drop, Function
 from guppylang.std.option import Option, nothing, some
 
-from .code_primitives import CodePrimitives
 from .state_factory import PreBlock
 
 __all__ = [
     "Distillation15To1",
+    "Distillation15To1Ops",
     "DistillationFlags",
 ]
 
@@ -65,10 +65,43 @@ def _parity(bits: array[bool, comptime(_N_OUTCOMES)]) -> bool:
     return parity
 
 
+@guppy.struct(frozen=True)
+class Distillation15To1Ops[Q, M]:  # type: ignore[misc]
+    r"""Logical operations a code must provide for `Distillation15To1`.
+
+    Construct with positional arguments in the attribute order below, e.g.
+    `Distillation15To1Ops(prep_noisy_t, h, sdg, z, cx, measure_z, decode)`. Guppy
+    structs take no keyword arguments, and `h`, `sdg` and `z` share a type, so a wrong
+    order still type checks.
+
+    Type parameters:
+        Q: The code's logical qubit type.
+        M: The code's logical measurement type, decoded with `decode`.
+
+    Attributes:
+        prep_noisy_t: Prepare a qubit in the logical :math:`T\ket{+}` state, not
+            necessarily fault-tolerantly.
+        h: Apply a logical H gate.
+        sdg: Apply a logical S dagger gate.
+        z: Apply a logical Z gate.
+        cx: Apply a logical CX gate, given the control then the target.
+        measure_z: Measure the qubit in the logical Z basis, without decoding.
+        decode: Decode a logical measurement outcome.
+    """
+
+    prep_noisy_t: Function[[], Q]  # type: ignore[type-arg,valid-type]
+    h: Function[[Q], None]  # type: ignore[type-arg,valid-type,misc]
+    sdg: Function[[Q], None]  # type: ignore[type-arg,valid-type,misc]
+    z: Function[[Q], None]  # type: ignore[type-arg,valid-type,misc]
+    cx: Function[[Q, Q], None]  # type: ignore[type-arg,valid-type]
+    measure_z: Function[[Q @ owned], M]  # type: ignore[type-arg,valid-type,misc]
+    decode: Function[[M @ owned], bool]  # type: ignore[type-arg,valid-type,misc]
+
+
 @guppy
 @no_type_check
 def _inject_tdg[Q, M: Drop](
-    ops: CodePrimitives[Q, M],
+    ops: Distillation15To1Ops[Q, M],
     q: Q,
     t_state: Q @ owned,
 ) -> None:
@@ -84,11 +117,11 @@ class DistillationFlags[Q, M]:
     """Unread X-basis outcomes of a 15-to-1 distillation round.
 
     Attributes:
-        ops: The code's primitives, used to decode the outcomes and correct the output.
+        ops: The code's operations, used to decode the outcomes and correct the output.
         outcomes: Measurement outcomes of blocks 1 to 15.
     """
 
-    ops: CodePrimitives[Q, M]
+    ops: Distillation15To1Ops[Q, M]
     outcomes: array[M, comptime(_N_OUTCOMES)]  # type: ignore[valid-type]
 
 
@@ -132,10 +165,10 @@ class Distillation15To1[Q, M: Drop]:
     https://journals.aps.org/prxquantum/pdf/10.1103/PRXQuantum.2.020341
 
     Attributes:
-        ops: The code's primitives used to implement the circuit.
+        ops: The code's operations used to implement the circuit.
     """
 
-    ops: CodePrimitives[Q, M]
+    ops: Distillation15To1Ops[Q, M]
 
     @guppy
     @no_type_check
