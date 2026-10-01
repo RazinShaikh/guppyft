@@ -11,17 +11,29 @@ from typing import Generic, no_type_check
 from guppylang import guppy
 from guppylang.std import quantum as qlib
 from guppylang.std.angles import pi
-from guppylang.std.builtins import Measurement, array, comptime, owned
+from guppylang.std.builtins import Measurement, array, comptime, nat, owned
 from guppylang.std.mem import mem_swap
 from zixy.qubit import pauli
 
 from guppyft.code_def import StabilizerCode
 from guppyft.std import LogicalBlock
-from guppyft.std.state_factory import PreBlock, flagged_pre_block
+from guppyft.std.code_primitives import code_primitives_from
+from guppyft.std.distillation import (
+    Distillation15To1,
+    DistillationFlags,  # noqa: F401 (used in the `DistilledTFlags` alias string)
+)
+from guppyft.std.state_factory import (
+    NoResources,
+    PreBlock,
+    StateFactory,
+    flagged_pre_block,
+)
 
 __all__ = [
     "CODE_DEF",
+    "DistilledTFlags",
     "RawMeasurement",
+    "SteaneOps",
     "cx",
     "cz",
     "decode",
@@ -30,6 +42,7 @@ __all__ = [
     "inject_tdg",
     "knill_qec_cycle",
     "measure_z",
+    "prep_t_state_distilled",
     "prep_t_state_ft",
     "prep_t_state_non_ft",
     "prep_zero_ft",
@@ -502,3 +515,55 @@ def cz(q0: LogicalBlock[7], q1: LogicalBlock[7]) -> None:
     """Logical CZ gate between two Steane blocks."""
     for i in range(7):
         qlib.cz(q0.data_qs[i], q1.data_qs[i])
+
+
+@guppy
+@no_type_check
+def _decode_borrowed(m: RawMeasurement[7]) -> bool:
+    return decode(RawMeasurement(m.measurements.copy()))
+
+
+@guppy
+@no_type_check
+def _discard(blk: LogicalBlock[7] @ owned) -> None:
+    blk.discard()
+
+
+# Aliases, since `code_primitives_from` cannot take `LogicalBlock[7]` directly.
+_Block = guppy.type_alias("_Block", "LogicalBlock[7]")
+_RawMeasurement = guppy.type_alias("_RawMeasurement", "RawMeasurement[7]")
+
+SteaneOps = code_primitives_from(
+    _Block,
+    _RawMeasurement,
+    prep_noisy_t=prep_t_state_non_ft,
+    x=x,
+    z=z,
+    h=h,
+    sdg=sdg,
+    cx=cx,
+    measure_z=measure_z,
+    decode=_decode_borrowed,
+    discard=_discard,
+)
+
+DistilledTFlags = guppy.type_alias(
+    "DistilledTFlags", "DistillationFlags[RawMeasurement[7], SteaneOps]"
+)
+
+
+@guppy
+@no_type_check
+def prep_t_state_distilled[N: nat](
+    zero_factory: StateFactory[LogicalBlock[7], array[Measurement, 1], NoResources, N],
+) -> PreBlock[LogicalBlock[7], DistilledTFlags]:
+    r"""Run one round of 15-to-1 :math:`T\ket{+}` distillation on Steane blocks.
+
+    Calling `force_check` on the result returns the distilled block, or `nothing` if
+    the round was rejected.
+
+    Args:
+        zero_factory: Factory providing the logical zero states used by the round.
+    """
+    zeros = array(zero_factory.get_state(NoResources()) for _ in range(16))
+    return Distillation15To1(SteaneOps()).prepare(zeros)
