@@ -21,6 +21,7 @@ from tket_exts import rotation
 
 from guppyft._util import get_link_name
 from guppyft.code.steane.primitives import (
+    DistilledTFlags,
     cx,
     cz,
     decode,
@@ -29,6 +30,7 @@ from guppyft.code.steane.primitives import (
     inject_tdg,
     knill_qec_cycle,
     measure_z,
+    prep_t_state_distilled,
     prep_t_state_ft,
     prep_t_state_non_ft,
     prep_zero_ft,
@@ -114,6 +116,18 @@ class QECStyle(Enum):
 
     Knill = auto()
     Steane = auto()
+
+
+class MagicStatePrep(Enum):
+    """How the magic state factory prepares T states.
+
+    `FlaggedFT` uses a flagged fault-tolerant preparation. `Distillation15To1` runs
+    15-to-1 distillation on non-fault-tolerant T states, taking its zero states from
+    the zero state factory.
+    """
+
+    FlaggedFT = auto()
+    Distillation15To1 = auto()
 
 
 @dataclass
@@ -226,6 +240,7 @@ class SteaneBuilder:
     _magic_factory_conf: RUSStateFactoryConf = field(
         default_factory=lambda: RUSStateFactoryConf(1, 5)
     )
+    _magic_state_prep: MagicStatePrep = MagicStatePrep.FlaggedFT
     _qec_policy: QECPolicy = field(default_factory=QECPolicy)
 
     @classmethod
@@ -255,22 +270,45 @@ class SteaneBuilder:
         # should be `@guppy.declare` and each code can provide an implementation to be
         # linked i.e. `allocate_next_addr`.
         # See https://github.com/quantinuum-dev/guppyft/issues/179
+        ZeroFactory = guppy.type_alias(
+            "ZeroFactory",
+            "StateFactory[LogicalBlock[7], array[Measurement, 1], NoResources, "
+            "comptime(self._zero_factory_conf.size)]",
+        )
+        match self._magic_state_prep:
+            case MagicStatePrep.FlaggedFT:
+                MagicFlags = guppy.type_alias("MagicFlags", "array[Measurement, 8]")
+                MagicResources = NoResources
+                magic_prep_routine = _prep_t_state_flagged
+
+                @guppy
+                @no_type_check
+                def get_magic_state(state: "STATE") -> LogicalBlock[7]:
+                    return state.magic_state_factory.get_state(NoResources())
+
+            case MagicStatePrep.Distillation15To1:
+                # TODO: Distillation blocks are not in `STATE.blocks`, so the QEC policy
+                # never applies to them.
+                MagicFlags = DistilledTFlags
+                MagicResources = ZeroFactory
+                magic_prep_routine = prep_t_state_distilled
+
+                @guppy
+                @no_type_check
+                def get_magic_state(state: "STATE") -> LogicalBlock[7]:
+                    return state.magic_state_factory.get_state(state.zero_state_factory)
+
         @guppy.struct
         class STATE:
             blocks: array[Option[LogicalBlock[7]], comptime(n_blocks)]  # type: ignore[valid-type,type-arg]
             addr_stack: Stack[tuple[int, int], comptime(n_blocks)]  # type: ignore[valid-type]
             qec_counter: array[float, comptime(n_blocks)]  # type: ignore[valid-type]
 
-            zero_state_factory: StateFactory[  # type: ignore[valid-type,type-arg]
-                LogicalBlock[7],
-                array[Measurement, 1],
-                NoResources,
-                comptime(self._zero_factory_conf.size),
-            ]
+            zero_state_factory: ZeroFactory  # type: ignore[valid-type]
             magic_state_factory: StateFactory[  # type: ignore[valid-type,type-arg]
                 LogicalBlock[7],
-                array[Measurement, 8],
-                NoResources,
+                MagicFlags,
+                MagicResources,
                 comptime(self._magic_factory_conf.size),
             ]
 
@@ -403,7 +441,7 @@ class SteaneBuilder:
             @guppy
             def _impl(state: STATE @ owned) -> tuple[STATE, tuple[int, int]]:
                 blk_id, qb_id = state.allocate_next_addr()
-                blk = state.magic_state_factory.get_state(NoResources())
+                blk = get_magic_state(state)
                 state.put_block(blk_id, blk)
 
                 state.qec_policy(array(blk_id), comptime(qec_policy.costs.prep_t))
@@ -709,7 +747,7 @@ class SteaneBuilder:
                 ),
                 # Magic state factory
                 StateFactory(
-                    _prep_t_state_flagged,
+                    magic_prep_routine,
                     comptime(self._magic_factory_conf.max_attempts),
                     empty_queue(),
                 ),
@@ -816,6 +854,10 @@ class SteaneBuilder:
     def with_magic_factory_conf(self, conf: RUSStateFactoryConf) -> Self:
         """Set the magic state factory configuration."""
         return replace(self, _magic_factory_conf=conf)
+
+    def with_magic_state_prep(self, prep: MagicStatePrep) -> Self:
+        """Set how the magic state factory prepares T states."""
+        return replace(self, _magic_state_prep=prep)
 
     def build(self, n_blocks: int) -> SteaneInstance:
         """Build a `SteaneInstance` configured for `n_blocks` logical blocks."""
