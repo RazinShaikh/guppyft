@@ -4,7 +4,7 @@ from typing import no_type_check
 
 from guppylang import guppy
 from guppylang.std.builtins import array, comptime, owned
-from guppylang.std.lang import Copy, Drop
+from guppylang.std.lang import Drop
 from guppylang.std.option import Option, nothing, some
 
 from .code_primitives import CodePrimitives
@@ -67,8 +67,8 @@ def _parity(bits: array[bool, comptime(_N_OUTCOMES)]) -> bool:
 
 @guppy
 @no_type_check
-def _inject_tdg[Q, M: Drop, Ops: CodePrimitives[Q, M]](
-    ops: Ops,
+def _inject_tdg[Q, M: Drop](
+    ops: CodePrimitives[Q, M],
     q: Q,
     t_state: Q @ owned,
 ) -> None:
@@ -80,7 +80,7 @@ def _inject_tdg[Q, M: Drop, Ops: CodePrimitives[Q, M]](
 
 
 @guppy.struct
-class DistillationFlags[M, Ops]:
+class DistillationFlags[Q, M]:
     """Unread X-basis outcomes of a 15-to-1 distillation round.
 
     Attributes:
@@ -88,14 +88,14 @@ class DistillationFlags[M, Ops]:
         outcomes: Measurement outcomes of blocks 1 to 15.
     """
 
-    ops: Ops
+    ops: CodePrimitives[Q, M]
     outcomes: array[M, comptime(_N_OUTCOMES)]  # type: ignore[valid-type]
 
 
 @guppy
 @no_type_check
-def _distillation_check[Q, M: Drop, Ops: (CodePrimitives[Q, M], Drop)](
-    q: Q @ owned, flags: DistillationFlags[M, Ops] @ owned
+def _distillation_check[Q, M: Drop](
+    q: Q @ owned, flags: DistillationFlags[Q, M] @ owned
 ) -> Option[Q]:
     """Check if the distilled state passes the X stabilizer checks.
     If the checks pass, returns `some(q)` with the corrected state.
@@ -103,7 +103,8 @@ def _distillation_check[Q, M: Drop, Ops: (CodePrimitives[Q, M], Drop)](
     ops = flags.ops
     bits = array(ops.decode(m) for m in flags.outcomes)
     if not _checks_pass(bits):
-        ops.discard(q)
+        # Measuring discards `q`
+        ops.measure_z(q)
         return nothing()
     if _parity(bits):
         ops.z(q)
@@ -112,18 +113,14 @@ def _distillation_check[Q, M: Drop, Ops: (CodePrimitives[Q, M], Drop)](
 
 @guppy
 @no_type_check
-def _distillation_discard[Q, M: Drop, Ops: (CodePrimitives[Q, M], Drop)](
-    q: Q @ owned, flags: DistillationFlags[M, Ops] @ owned
+def _distillation_discard[Q, M: Drop](
+    q: Q @ owned, flags: DistillationFlags[Q, M] @ owned
 ) -> None:
-    flags.ops.discard(q)
+    flags.ops.measure_z(q)
 
 
 @guppy.struct
-class Distillation15To1[
-    Q,
-    M: Drop,
-    Ops: (CodePrimitives[Q, M], Copy, Drop),  # type: ignore[name-defined]
-]:
+class Distillation15To1[Q, M: Drop]:
     r"""15-to-1 :math:`T\ket{+}` distillation using the [[15, 1, 3]] Reed-Muller code.
 
     Qubit 0 is entangled with a 15-qubit Reed-Muller code block, on which transversal
@@ -138,13 +135,13 @@ class Distillation15To1[
         ops: The code's primitives used to implement the circuit.
     """
 
-    ops: Ops
+    ops: CodePrimitives[Q, M]
 
     @guppy
     @no_type_check
     def prepare(
         self, qs: array[Q, comptime(_N_BLOCKS)] @ owned
-    ) -> PreBlock[Q, DistillationFlags[M, Ops]]:
+    ) -> PreBlock[Q, DistillationFlags[Q, M]]:
         r"""Run one distillation round without reading the X-basis outcomes.
 
         Calling `force_check` on the result reads the outcomes, and returns the

@@ -21,7 +21,6 @@ from tket_exts import rotation
 
 from guppyft._util import get_link_name
 from guppyft.code.steane.primitives import (
-    DistilledTFlags,
     cx,
     cz,
     decode,
@@ -54,6 +53,9 @@ from guppyft.encode import (
 from guppyft.extensions import std_ops, std_types, steane_ops, steane_types
 from guppyft.globals import map_global, with_global
 from guppyft.std import LogicalBlock
+from guppyft.std.distillation import (
+    DistillationFlags,  # noqa: F401 (used in the `MagicFlags` alias string)
+)
 from guppyft.std.state_factory import NoResources, PreBlock, StateFactory
 
 from . import logical as steane_logical
@@ -288,7 +290,10 @@ class SteaneBuilder:
             case MagicStatePrep.Distillation15To1:
                 # TODO: Distillation blocks are not in `STATE.blocks`, so the QEC policy
                 # never applies to them.
-                MagicFlags = DistilledTFlags
+                MagicFlags = guppy.type_alias(
+                    "MagicFlags",
+                    "DistillationFlags[LogicalBlock[7], RawMeasurement[7]]",
+                )
                 MagicResources = ZeroFactory
                 magic_prep_routine = prep_t_state_distilled
 
