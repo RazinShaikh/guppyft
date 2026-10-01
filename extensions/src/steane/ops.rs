@@ -23,7 +23,7 @@ use tket::extension::rotation::rotation_type;
 /// The extension identifier.
 pub const EXTENSION_ID: ExtensionId = ExtensionId::new_unchecked("guppyft.steane.ops");
 /// Extension version.
-pub const VERSION: semver::Version = semver::Version::new(0, 2, 3);
+pub const VERSION: semver::Version = semver::Version::new(0, 2, 2);
 
 /// Logical Steane operations.
 #[derive(
@@ -58,8 +58,6 @@ pub enum SteaneOpDef {
     rz,
     /// Prepare a magic state that can be used to produce T-like states (T and Tdg).
     prep_t_state,
-    /// Prepare a T magic state non-fault-tolerantly, e.g. as input to distillation.
-    prep_t_state_non_ft,
     /// Perform a T gate by injecting a magic state.
     inject_t,
     /// Perform a Tdg gate by injecting a magic state.
@@ -174,7 +172,6 @@ impl MakeOpDef for SteaneOpDef {
             )
             .into(),
             prep_t_state => sig_qubits(0, 1),
-            prep_t_state_non_ft => sig_qubits(0, 1),
             inject_t => sig_qubits(2, 1),
             inject_tdg => sig_qubits(2, 1),
             cx => sig_qubits(2, 2),
@@ -215,7 +212,7 @@ mod tests {
     fn test_steane_ops_extension() {
         assert_eq!(EXTENSION.name() as &str, "guppyft.steane.ops");
         assert_eq!(EXTENSION.types().count(), 0);
-        assert_eq!(EXTENSION.operations().count(), 19);
+        assert_eq!(EXTENSION.operations().count(), 18);
     }
 
     #[test]
