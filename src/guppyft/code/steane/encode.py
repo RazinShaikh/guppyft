@@ -24,12 +24,12 @@ from guppyft.code.steane.primitives import (
     cx,
     cz,
     decode,
+    distillation_ops,
     h,
     inject_t,
     inject_tdg,
     knill_qec_cycle,
     measure_z,
-    prep_t_state_distilled,
     prep_t_state_ft,
     prep_zero_ft,
     s,
@@ -53,9 +53,7 @@ from guppyft.encode import (
 from guppyft.extensions import std_ops, std_types, steane_ops, steane_types
 from guppyft.globals import map_global, with_global
 from guppyft.std import LogicalBlock
-from guppyft.std.distillation import (
-    DistillationFlags,  # noqa: F401 (used in the `MagicFlags` alias string)
-)
+from guppyft.std.distillation import Distillation15To1, DistillationFlags
 from guppyft.std.state_factory import NoResources, PreBlock, StateFactory
 
 from . import logical as steane_logical
@@ -380,7 +378,21 @@ class SteaneBuilder:
                     "DistillationFlags[LogicalBlock[7], RawMeasurement[7]]",
                 )
                 MagicResources = ZeroFactory
-                magic_prep_routine = prep_t_state_distilled
+
+                @guppy
+                @no_type_check
+                def _prep_t_state_distilled(
+                    zero_factory: ZeroFactory,
+                ) -> PreBlock[
+                    LogicalBlock[7],
+                    DistillationFlags[LogicalBlock[7], RawMeasurement[7]],
+                ]:
+                    zeros = array(
+                        zero_factory.get_state(NoResources()) for _ in range(16)
+                    )
+                    return Distillation15To1(distillation_ops()).prepare(zeros)
+
+                magic_prep_routine = _prep_t_state_distilled
 
                 @guppy
                 @no_type_check

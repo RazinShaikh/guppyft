@@ -11,23 +11,14 @@ from typing import Generic, no_type_check
 from guppylang import guppy
 from guppylang.std import quantum as qlib
 from guppylang.std.angles import pi
-from guppylang.std.builtins import Measurement, array, comptime, nat, owned
+from guppylang.std.builtins import Measurement, array, comptime, owned
 from guppylang.std.mem import mem_swap
 from zixy.qubit import pauli
 
 from guppyft.code_def import StabilizerCode
 from guppyft.std import LogicalBlock
-from guppyft.std.distillation import (
-    Distillation15To1,
-    Distillation15To1Ops,
-    DistillationFlags,
-)
-from guppyft.std.state_factory import (
-    NoResources,
-    PreBlock,
-    StateFactory,
-    flagged_pre_block,
-)
+from guppyft.std.distillation import Distillation15To1Ops
+from guppyft.std.state_factory import PreBlock, flagged_pre_block
 
 __all__ = [
     "CODE_DEF",
@@ -35,12 +26,12 @@ __all__ = [
     "cx",
     "cz",
     "decode",
+    "distillation_ops",
     "h",
     "inject_t",
     "inject_tdg",
     "knill_qec_cycle",
     "measure_z",
-    "prep_t_state_distilled",
     "prep_t_state_ft",
     "prep_t_state_non_ft",
     "prep_zero_ft",
@@ -517,17 +508,6 @@ def cz(q0: LogicalBlock[7], q1: LogicalBlock[7]) -> None:
 
 @guppy
 @no_type_check
-def prep_t_state_distilled[F, N: nat](
-    zero_factory: StateFactory[LogicalBlock[7], F, NoResources, N],
-) -> PreBlock[LogicalBlock[7], DistillationFlags[LogicalBlock[7], RawMeasurement[7]]]:
-    r"""Run one round of 15-to-1 :math:`T\ket{+}` distillation on Steane blocks.
-
-    Calling `force_check` on the result returns the distilled block, or `nothing` if
-    the round was rejected.
-
-    Args:
-        zero_factory: Factory providing the logical zero states used by the round.
-    """
-    ops = Distillation15To1Ops(prep_t_state_non_ft, h, sdg, z, cx, measure_z, decode)
-    zeros = array(zero_factory.get_state(NoResources()) for _ in range(16))
-    return Distillation15To1(ops).prepare(zeros)
+def distillation_ops() -> Distillation15To1Ops[LogicalBlock[7], RawMeasurement[7]]:
+    """Steane operations for 15-to-1 magic state distillation."""
+    return Distillation15To1Ops(prep_t_state_non_ft, h, sdg, z, cx, measure_z, decode)
