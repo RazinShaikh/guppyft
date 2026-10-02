@@ -12,6 +12,7 @@ from .state_factory import PreBlock
 __all__ = [
     "Distillation15To1",
     "Distillation15To1Ops",
+    "Distillation15To1QECPolicy",
     "DistillationFlags",
 ]
 
@@ -98,6 +99,46 @@ class Distillation15To1Ops[Q, M]:  # type: ignore[misc]
     decode: Function[[M @ owned], bool]  # type: ignore[type-arg,valid-type,misc]
 
 
+@guppy.struct(frozen=True)
+class Distillation15To1QECPolicy:  # type: ignore[misc]
+    """When `Distillation15To1.prepare` applies QEC cycles to its qubits.
+
+    Each qubit accumulates the cost of the operations applied to it, and gets a QEC
+    cycle once its total reaches `threshold`, which resets the total. Construct with
+    positional arguments in the attribute order below.
+
+    Attributes:
+        threshold: Accumulated cost at which a qubit gets a QEC cycle.
+        prep_zero: Cost of each qubit's initial zero state.
+        h: Cost of a logical H gate.
+        cx: Cost of a logical CX gate, charged to both qubits.
+        inject_tdg: Cost of injecting T dagger into a qubit.
+    """
+
+    threshold: float
+    prep_zero: float
+    h: float
+    cx: float
+    inject_tdg: float
+
+
+@guppy
+@no_type_check
+def _charge[Q, R](
+    qs: array[Q, comptime(_N_BLOCKS)],
+    counters: array[float, comptime(_N_BLOCKS)],
+    i: int,
+    cost: float,
+    policy: Distillation15To1QECPolicy,
+    resources: R,
+    qec: Function[[R, Q], None],
+) -> None:
+    counters[i] = counters[i] + cost
+    if counters[i] >= policy.threshold:
+        qec(resources, qs[i])
+        counters[i] = 0.0
+
+
 @guppy
 @no_type_check
 def _inject_tdg[Q, M: Drop](
@@ -172,8 +213,12 @@ class Distillation15To1[Q, M: Drop]:
 
     @guppy
     @no_type_check
-    def prepare(
-        self, qs: array[Q, comptime(_N_BLOCKS)] @ owned
+    def prepare[R](
+        self,
+        qs: array[Q, comptime(_N_BLOCKS)] @ owned,
+        resources: R,
+        qec: Function[[R, Q], None],
+        qec_policy: Distillation15To1QECPolicy,
     ) -> PreBlock[Q, DistillationFlags[Q, M]]:
         r"""Run one distillation round without reading the X-basis outcomes.
 
@@ -182,16 +227,28 @@ class Distillation15To1[Q, M: Drop]:
 
         Args:
             qs: 16 qubits in the logical zero state, consumed by the round.
+            resources: Resources passed to `qec`, e.g. a factory of ancilla states.
+            qec: Applies a QEC cycle to a qubit.
+            qec_policy: When to apply `qec` to each of the 16 qubits.
         """
+        counters = array(0.0 for _ in range(comptime(_N_BLOCKS)))
+        for i in range(comptime(_N_BLOCKS)):
+            _charge(qs, counters, i, qec_policy.prep_zero, qec_policy, resources, qec)
+
         for i in comptime(_PLUS_IDXS):
             self.ops.h(qs[i])
+            _charge(qs, counters, i, qec_policy.h, qec_policy, resources, qec)
         for c, t in comptime(_ENCODER_CX_PAIRS):
             self.ops.cx(qs[c], qs[t])
+            _charge(qs, counters, c, qec_policy.cx, qec_policy, resources, qec)
+            _charge(qs, counters, t, qec_policy.cx, qec_policy, resources, qec)
 
         for j in range(1, comptime(_N_BLOCKS)):
             t_state = self.ops.prep_noisy_t()
             _inject_tdg(self.ops, qs[j], t_state)
+            _charge(qs, counters, j, qec_policy.inject_tdg, qec_policy, resources, qec)
             self.ops.h(qs[j])
+            _charge(qs, counters, j, qec_policy.h, qec_policy, resources, qec)
 
         outcomes = array(
             self.ops.measure_z(qs.take(i + 1)) for i in range(comptime(_N_OUTCOMES))

@@ -53,7 +53,11 @@ from guppyft.encode import (
 from guppyft.extensions import std_ops, std_types, steane_ops, steane_types
 from guppyft.globals import map_global, with_global
 from guppyft.std import LogicalBlock
-from guppyft.std.distillation import Distillation15To1, DistillationFlags
+from guppyft.std.distillation import (
+    Distillation15To1,
+    Distillation15To1QECPolicy,
+    DistillationFlags,
+)
 from guppyft.std.state_factory import NoResources, PreBlock, StateFactory
 
 from . import logical as steane_logical
@@ -371,35 +375,43 @@ class SteaneBuilder:
                     return state.magic_state_factory.get_state(NoResources())
 
             case MagicStatePrep.Distillation15To1:
-                # TODO: Distillation blocks are not in `Core.blocks`, so the QEC policy
-                # never applies to them.
                 MagicFlags = guppy.type_alias(
                     "MagicFlags",
                     "DistillationFlags[LogicalBlock[7], RawMeasurement[7]]",
                 )
-                MagicResources = ZeroFactory
+                MagicResources = Core
 
                 @guppy
                 @no_type_check
                 def _prep_t_state_distilled(
-                    zero_factory: ZeroFactory,
+                    core: Core,
                 ) -> PreBlock[
                     LogicalBlock[7],
                     DistillationFlags[LogicalBlock[7], RawMeasurement[7]],
                 ]:
                     zeros = array(
-                        zero_factory.get_state(NoResources()) for _ in range(16)
+                        core.zero_state_factory.get_state(NoResources())
+                        for _ in range(16)
                     )
-                    return Distillation15To1(distillation_ops()).prepare(zeros)
+                    return Distillation15To1(distillation_ops()).prepare(
+                        zeros,
+                        core,
+                        qec_cycle_def,
+                        Distillation15To1QECPolicy(
+                            comptime(float(qec_policy.threshold)),
+                            comptime(qec_policy.costs.prep_zero),
+                            comptime(qec_policy.costs.h),
+                            comptime(qec_policy.costs.cx),
+                            comptime(qec_policy.costs.inject_tdg),
+                        ),
+                    )
 
                 magic_prep_routine = _prep_t_state_distilled
 
                 @guppy
                 @no_type_check
                 def get_magic_state(state: "STATE") -> LogicalBlock[7]:
-                    return state.magic_state_factory.get_state(
-                        state.core.zero_state_factory
-                    )
+                    return state.magic_state_factory.get_state(state.core)
 
         @guppy.struct
         class STATE:
