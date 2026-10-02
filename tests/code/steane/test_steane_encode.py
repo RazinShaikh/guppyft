@@ -33,7 +33,9 @@ from selene_hugr_qis_compiler import check_hugr
 from selene_sim.backends.bundled_simulators import Coinflip
 
 from guppyft.code.steane.encode import (
+    MagicStatePrep,
     QECPolicy,
+    QECStyle,
     RUSStateFactoryConf,
     SteaneBuilder,
     SteaneEncoderParams,
@@ -236,6 +238,53 @@ def test_t_encoder_smoke() -> None:
     )
 
     assert res == [{}]
+
+
+@pytest.mark.parametrize("style", [QECStyle.Knill, QECStyle.Steane])
+def test_distilled_t_encode(style: QECStyle) -> None:
+    # Distillation needs more than 112 qubits and is non-Clifford, so only encode.
+    @guppy
+    def main() -> None:
+        q = qubit()
+        h(q)
+        t(q)
+        output("q", measure(q).read())
+
+    policy = QECPolicy(style=style, threshold=2)
+    policy.costs.cx = 1.0
+    policy.costs.inject_tdg = 1.0
+
+    phys_pkg = (
+        SteaneBuilder()
+        .with_qec_policy(policy)
+        .with_magic_state_prep(MagicStatePrep.Distillation15To1)
+        .build(n_blocks=2)
+        .encode(main.compile(), as_bytes=True)
+    )
+    check_hugr(phys_pkg)
+
+
+def test_distillation_clifford_program() -> None:
+    @guppy
+    def main() -> None:
+        q0 = qubit()
+        q1 = qubit()
+        x(q0)
+        cx(q0, q1)
+        output("q0", measure(q0).read())
+        output("q1", measure(q1).read())
+
+    res = (
+        SteaneBuilder()
+        .with_magic_state_prep(MagicStatePrep.Distillation15To1)
+        .build(n_blocks=2)
+        .emulator(main.compile(), n_qubits=16)
+        .stabilizer_sim()
+        .run()
+        .collated_shots()
+    )
+
+    assert res == [{"q0": [1], "q1": [1]}]
 
 
 def test_encode_classical() -> None:
